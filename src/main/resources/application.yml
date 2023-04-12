@@ -1,0 +1,23 @@
+server:
+  port: 8080
+
+spring:
+  config:
+    import: "consul:"
+  cloud:
+    consul:
+      host: localhost
+      port: 8500
+      discovery:
+        health-check-path: /health
+      config:
+        format: yaml
+  application:
+    name: brambling-note-user
+  jpa:
+    hibernate:
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.PostgreSQL94Dialect
+  #    show-sql: true
+  datasource:
+    driver-class-name: org.postgresql.Driver
