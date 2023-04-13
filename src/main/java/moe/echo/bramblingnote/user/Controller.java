@@ -16,6 +16,11 @@ public class Controller {
     @Autowired
     private Repository repository;
 
+    @RequestMapping("/health")
+    public ResponseEntity<Object> health() {
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/")
     public UserEntity add(@RequestBody NewUser newUser) {
         String email = newUser.getEmail();
