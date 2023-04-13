@@ -12,12 +12,12 @@ import java.util.Map;
 import java.util.UUID;
 
 @org.springframework.stereotype.Controller
-@RequestMapping(path = "/user")
+@RequestMapping
 public class Controller {
     @Autowired
     private Repository repository;
 
-    @PostMapping(path = "/")
+    @PostMapping
     public @ResponseBody UserEntity add(@RequestBody NewUser newUser) {
         String email = newUser.getEmail();
         String name = newUser.getName();
