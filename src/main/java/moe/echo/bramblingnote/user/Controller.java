@@ -11,14 +11,13 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.Map;
 import java.util.UUID;
 
-@org.springframework.stereotype.Controller
-@RequestMapping
+@RestController
 public class Controller {
     @Autowired
     private Repository repository;
 
-    @PostMapping
-    public @ResponseBody UserEntity add(@RequestBody NewUser newUser) {
+    @PostMapping("/")
+    public UserEntity add(@RequestBody NewUser newUser) {
         String email = newUser.getEmail();
         String name = newUser.getName();
 
@@ -35,6 +34,14 @@ public class Controller {
         if (invalidProperty != null) {
             throw new ResponseStatusException(
                     HttpStatusCode.valueOf(400), invalidProperty + " is invalid. Request body: " + newUser
+            );
+        }
+
+        boolean emailExisted = repository.existsByEmail(email);
+
+        if (emailExisted) {
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(400), "User with this email is already exist: " + email
             );
         }
 
@@ -84,7 +91,7 @@ public class Controller {
     }
 
     @GetMapping("/{uuid}")
-    public @ResponseBody UserEntity get(@PathVariable UUID uuid, @RequestBody Map<String, String> request) {
+    public UserEntity get(@PathVariable UUID uuid, @RequestBody Map<String, String> request) {
         Argon2 argon2 = Argon2Factory.create();
         String password = request.get("password");
 
@@ -108,7 +115,7 @@ public class Controller {
     }
 
     @PutMapping("/{uuid}")
-    public @ResponseBody UserEntity update(@PathVariable UUID uuid, @RequestBody EditedUser newUser) {
+    public UserEntity update(@PathVariable UUID uuid, @RequestBody EditedUser newUser) {
         Argon2 argon2 = Argon2Factory.create();
 
         return repository.findById(uuid).map(user -> {
@@ -118,7 +125,15 @@ public class Controller {
                 String password = newUser.getNewPassword();
                 Boolean verified = newUser.getVerified();
 
-                if (email != null) {
+                if (email != null && !email.equals(user.getEmail())) {
+                    boolean emailExisted = repository.existsByEmail(email);
+
+                    if (emailExisted) {
+                        throw new ResponseStatusException(
+                                HttpStatusCode.valueOf(400), "User with this email is already exist: " + email
+                        );
+                    }
+
                     user.setEmail(email);
                 }
                 if (name != null) {
