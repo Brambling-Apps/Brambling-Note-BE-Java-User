@@ -38,7 +38,7 @@ public class Controller {
 
         if (invalidProperty != null) {
             throw new ResponseStatusException(
-                    HttpStatusCode.valueOf(400), invalidProperty + " is invalid. Request body: " + newUser
+                    HttpStatusCode.valueOf(400), "Invalid " + invalidProperty + ": " + newUser
             );
         }
 
@@ -46,7 +46,7 @@ public class Controller {
 
         if (emailExisted) {
             throw new ResponseStatusException(
-                    HttpStatusCode.valueOf(400), "User with this email is already exist: " + email
+                    HttpStatusCode.valueOf(400), "User already exists: " + email
             );
         }
 
@@ -76,7 +76,7 @@ public class Controller {
 
         if (password == null) {
             throw new ResponseStatusException(
-                    HttpStatusCode.valueOf(400), "Cannot resolve password from request: " + request
+                    HttpStatusCode.valueOf(400), "Cannot resolve password: " + request
             );
         }
 
@@ -88,10 +88,10 @@ public class Controller {
                 return ResponseEntity.ok().body("");
             } else {
                 // Hash doesn't match password
-                return ResponseEntity.status(401).body("Password incorrect");
+                return ResponseEntity.status(401).body("Invalid password");
             }
         }).orElseThrow(() -> new ResponseStatusException(
-                HttpStatusCode.valueOf(404), "User " + uuid + " was not found"
+                HttpStatusCode.valueOf(404), "User `" + uuid + "` was not found"
         ));
     }
 
@@ -102,7 +102,7 @@ public class Controller {
 
         if (password == null) {
             throw new ResponseStatusException(
-                    HttpStatusCode.valueOf(400), "Cannot resolve password from request: " + request
+                    HttpStatusCode.valueOf(400), "Cannot resolve password: " + request
             );
         }
 
@@ -111,11 +111,11 @@ public class Controller {
                 return user;
             } else {
                 throw new ResponseStatusException(
-                        HttpStatusCode.valueOf(401), "Password incorrect"
+                        HttpStatusCode.valueOf(401), "Invalid password"
                 );
             }
         }).orElseThrow(() -> new ResponseStatusException(
-                HttpStatusCode.valueOf(404), "User " + uuid + " was not found"
+                HttpStatusCode.valueOf(404), "User `" + uuid + "` was not found"
         ));
     }
 
@@ -135,7 +135,7 @@ public class Controller {
 
                     if (emailExisted) {
                         throw new ResponseStatusException(
-                                HttpStatusCode.valueOf(400), "User with this email is already exist: " + email
+                                HttpStatusCode.valueOf(400), "User already exists: " + email
                         );
                     }
 
@@ -156,11 +156,11 @@ public class Controller {
                 return repository.save(user);
             } else {
                 throw new ResponseStatusException(
-                        HttpStatusCode.valueOf(401), "Password incorrect"
+                        HttpStatusCode.valueOf(401), "Invalid password"
                 );
             }
         }).orElseThrow(() -> new ResponseStatusException(
-                HttpStatusCode.valueOf(404), "User " + uuid + " was not found"
+                HttpStatusCode.valueOf(404), "User `" + uuid + "` not found"
         ));
     }
 }
