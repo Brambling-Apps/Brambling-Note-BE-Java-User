@@ -110,6 +110,26 @@ public class Controller {
         );
     }
 
+    @GetMapping("/{email}")
+    public UserEntity getByEmailAndPassword(@PathVariable String email, @RequestParam String password) {
+        Argon2 argon2 = Argon2Factory.create();
+
+        UserEntity user = repository.findByEmail(email);
+        if (user == null) {
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(404), "User `" + email + "` was not found"
+            );
+        }
+
+        if (password != null && argon2.verify(user.getPasswordHash(), password.getBytes())) {
+            return user;
+        } else {
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(401), "Invalid password"
+            );
+        }
+    }
+
     @PutMapping("/")
     public UserEntity update(@RequestBody NewUser newUser, HttpSession session) {
         Object rawUser = session.getAttribute("user");

@@ -6,4 +6,5 @@ import java.util.UUID;
 
 public interface Repository extends CrudRepository<UserEntity, UUID> {
     boolean existsByEmail(String email);
+    UserEntity findByEmail(String email);
 }
