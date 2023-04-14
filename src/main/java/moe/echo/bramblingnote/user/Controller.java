@@ -2,27 +2,35 @@ package moe.echo.bramblingnote.user;
 
 import de.mkammerer.argon2.Argon2;
 import de.mkammerer.argon2.Argon2Factory;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Map;
-import java.util.UUID;
-
 @RestController
 public class Controller {
     @Autowired
     private Repository repository;
 
-    @RequestMapping("/health")
+    private UserWithoutPassword toUserWithoutPassword(UserEntity user) {
+        UserWithoutPassword u = new UserWithoutPassword();
+        u.setId(user.getId());
+        u.setEmail(user.getEmail());
+        u.setName(user.getName());
+        u.setVerified(user.getVerified());
+        u.setLastVerifyEmail(user.getLastVerifyEmail());
+        return u;
+    };
+
+    @GetMapping("/health")
     public ResponseEntity<Object> health() {
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/")
-    public UserEntity add(@RequestBody NewUser newUser) {
+    public UserEntity add(@RequestBody NewUser newUser, HttpSession session) {
         String email = newUser.getEmail();
         String name = newUser.getName();
 
@@ -52,7 +60,7 @@ public class Controller {
 
         UserEntity user = new UserEntity();
         user.setEmail(email);
-        user.setName(newUser.getName());
+        user.setName(name);
 
         // https://github.com/phxql/argon2-jvm#usage
         Argon2 argon2 = Argon2Factory.create();
@@ -65,102 +73,85 @@ public class Controller {
             argon2.wipeArray(passwordByte);
         }
 
+        session.setAttribute("user", toUserWithoutPassword(user));
         return repository.save(user);
     }
 
-    @DeleteMapping("/{uuid}")
-    public ResponseEntity<String> delete(@PathVariable UUID uuid, @RequestBody Map<String, String> request) {
-        // https://github.com/phxql/argon2-jvm#usage
-        Argon2 argon2 = Argon2Factory.create();
-        String password = request.get("password");
-
-        if (password == null) {
-            throw new ResponseStatusException(
-                    HttpStatusCode.valueOf(400), "Cannot resolve password: " + request
-            );
-        }
-
-        return repository.findById(uuid).map(user -> {
-            // Verify password
-            if (argon2.verify(user.getPasswordHash(), password.getBytes())) {
-                // Hash matches password
-                repository.deleteById(uuid);
+    @DeleteMapping("/")
+    public ResponseEntity<String> delete(HttpSession session) {
+        Object rawUser = session.getAttribute("user");
+        if (rawUser instanceof UserWithoutPassword user) {
+            return repository.findById(user.getId()).map(u -> {
+                session.invalidate();
+                repository.deleteById(u.getId());
                 return ResponseEntity.ok().body("");
-            } else {
-                // Hash doesn't match password
-                return ResponseEntity.status(401).body("Invalid password");
-            }
-        }).orElseThrow(() -> new ResponseStatusException(
-                HttpStatusCode.valueOf(404), "User `" + uuid + "` was not found"
-        ));
-    }
-
-    @GetMapping("/{uuid}")
-    public UserEntity get(@PathVariable UUID uuid, @RequestBody Map<String, String> request) {
-        Argon2 argon2 = Argon2Factory.create();
-        String password = request.get("password");
-
-        if (password == null) {
-            throw new ResponseStatusException(
-                    HttpStatusCode.valueOf(400), "Cannot resolve password: " + request
-            );
+            }).orElseThrow(() -> {
+                session.invalidate();
+                return new ResponseStatusException(
+                        HttpStatusCode.valueOf(404), "User `" + user.getId() + "` was not found"
+                );
+            });
         }
 
-        return repository.findById(uuid).map(user -> {
-            if (argon2.verify(user.getPasswordHash(), password.getBytes())) {
-                return user;
-            } else {
-                throw new ResponseStatusException(
-                        HttpStatusCode.valueOf(401), "Invalid password"
-                );
-            }
-        }).orElseThrow(() -> new ResponseStatusException(
-                HttpStatusCode.valueOf(404), "User `" + uuid + "` was not found"
-        ));
+        throw new ResponseStatusException(
+                HttpStatusCode.valueOf(401), "You are not login yet"
+        );
     }
 
-    @PutMapping("/{uuid}")
-    public UserEntity update(@PathVariable UUID uuid, @RequestBody EditedUser newUser) {
-        Argon2 argon2 = Argon2Factory.create();
+    @GetMapping("/")
+    public Object get(HttpSession session) {
+        Object rawUser = session.getAttribute("user");
+        if (rawUser instanceof UserWithoutPassword user) {
+            return user;
+        }
 
-        return repository.findById(uuid).map(user -> {
-            if (argon2.verify(user.getPasswordHash(), newUser.getPassword().getBytes())) {
+        throw new ResponseStatusException(
+                HttpStatusCode.valueOf(401), "You are not login yet"
+        );
+    }
+
+    @PutMapping("/")
+    public UserEntity update(@RequestBody NewUser newUser, HttpSession session) {
+        Object rawUser = session.getAttribute("user");
+        if (rawUser instanceof UserWithoutPassword user) {
+            return repository.findById(user.getId()).map(u -> {
                 String email = newUser.getEmail();
                 String name = newUser.getName();
-                String password = newUser.getNewPassword();
-                Boolean verified = newUser.getVerified();
+                String password = newUser.getPassword();
 
-                if (email != null && !email.equals(user.getEmail())) {
+                if (email != null && !email.equals(u.getEmail())) {
                     boolean emailExisted = repository.existsByEmail(email);
 
                     if (emailExisted) {
                         throw new ResponseStatusException(
-                                HttpStatusCode.valueOf(400), "User already exists: " + email
+                                HttpStatusCode.valueOf(400), "User " + email + " already exists"
                         );
                     }
 
-                    user.setEmail(email);
+                    u.setEmail(email);
                 }
                 if (name != null) {
-                    user.setEmail(name);
+                    u.setName(name);
                 }
                 if (password != null) {
-                    user.setPasswordHash(argon2.hash(
+                    Argon2 argon2 = Argon2Factory.create();
+                    u.setPasswordHash(argon2.hash(
                             10, 65536, 1, password.getBytes()
                     ));
                 }
-                if (verified != null) {
-                    user.setVerified(verified);
-                }
 
-                return repository.save(user);
-            } else {
-                throw new ResponseStatusException(
-                        HttpStatusCode.valueOf(401), "Invalid password"
+                session.setAttribute("user", toUserWithoutPassword(u));
+                return repository.save(u);
+            }).orElseThrow(() -> {
+                session.invalidate();
+                return new ResponseStatusException(
+                        HttpStatusCode.valueOf(404), "User `" + user.getId() + "` was not found"
                 );
-            }
-        }).orElseThrow(() -> new ResponseStatusException(
-                HttpStatusCode.valueOf(404), "User `" + uuid + "` not found"
-        ));
+            });
+        }
+
+        throw new ResponseStatusException(
+                HttpStatusCode.valueOf(401), "You are not login yet"
+        );
     }
 }
