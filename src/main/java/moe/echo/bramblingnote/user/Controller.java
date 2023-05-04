@@ -22,7 +22,7 @@ public class Controller {
         u.setVerified(user.getVerified());
         u.setLastVerifyEmail(user.getLastVerifyEmail());
         return u;
-    };
+    }
 
     @GetMapping("/health")
     public ResponseEntity<Object> health() {
