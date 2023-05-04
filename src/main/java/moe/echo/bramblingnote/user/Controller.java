@@ -14,8 +14,8 @@ public class Controller {
     @Autowired
     private Repository repository;
 
-    private UserForReturn toUserForReturn(UserEntity user) {
-        UserForReturn u = new UserForReturn();
+    private UserForSession toUserForReturn(UserEntity user) {
+        UserForSession u = new UserForSession();
         u.setId(user.getId());
         u.setEmail(user.getEmail());
         u.setName(user.getName());
@@ -80,7 +80,7 @@ public class Controller {
     @DeleteMapping("/")
     public ResponseEntity<String> delete(HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
+        if (rawUser instanceof UserForSession user) {
             return repository.findById(user.getId()).map(u -> {
                 session.invalidate();
                 repository.deleteById(u.getId());
@@ -101,7 +101,7 @@ public class Controller {
     @GetMapping("/")
     public Object get(HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
+        if (rawUser instanceof UserForSession user) {
             return user;
         }
 
@@ -133,7 +133,7 @@ public class Controller {
     @PutMapping("/")
     public UserEntity update(@RequestBody NewUser newUser, HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
+        if (rawUser instanceof UserForSession user) {
             return repository.findById(user.getId()).map(u -> {
                 String email = newUser.getEmail();
                 String name = newUser.getName();
