@@ -14,8 +14,8 @@ public class Controller {
     @Autowired
     private Repository repository;
 
-    private UserWithoutPassword toUserWithoutPassword(UserEntity user) {
-        UserWithoutPassword u = new UserWithoutPassword();
+    private UserForReturn toUserForReturn(UserEntity user) {
+        UserForReturn u = new UserForReturn();
         u.setId(user.getId());
         u.setEmail(user.getEmail());
         u.setName(user.getName());
@@ -73,14 +73,14 @@ public class Controller {
             argon2.wipeArray(passwordByte);
         }
 
-        session.setAttribute("user", toUserWithoutPassword(user));
+        session.setAttribute("user", toUserForReturn(user));
         return repository.save(user);
     }
 
     @DeleteMapping("/")
     public ResponseEntity<String> delete(HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserWithoutPassword user) {
+        if (rawUser instanceof UserForReturn user) {
             return repository.findById(user.getId()).map(u -> {
                 session.invalidate();
                 repository.deleteById(u.getId());
@@ -101,7 +101,7 @@ public class Controller {
     @GetMapping("/")
     public Object get(HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserWithoutPassword user) {
+        if (rawUser instanceof UserForReturn user) {
             return user;
         }
 
@@ -133,7 +133,7 @@ public class Controller {
     @PutMapping("/")
     public UserEntity update(@RequestBody NewUser newUser, HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserWithoutPassword user) {
+        if (rawUser instanceof UserForReturn user) {
             return repository.findById(user.getId()).map(u -> {
                 String email = newUser.getEmail();
                 String name = newUser.getName();
@@ -160,7 +160,7 @@ public class Controller {
                     ));
                 }
 
-                session.setAttribute("user", toUserWithoutPassword(u));
+                session.setAttribute("user", toUserForReturn(u));
                 return repository.save(u);
             }).orElseThrow(() -> {
                 session.invalidate();
