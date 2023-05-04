@@ -9,7 +9,7 @@ import java.util.UUID;
 
 @Getter
 @Setter
-public class UserForSession implements Serializable {
+public class UserForReturn implements Serializable {
     private UUID id;
 
     private String email;
