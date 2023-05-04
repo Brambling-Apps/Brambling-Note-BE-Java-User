@@ -14,7 +14,7 @@ import java.util.UUID;
 @Entity
 @Getter
 @Setter
-public class UserEntity extends UserForReturn {
+public class UserEntity {
     @Id
     @UuidGenerator
     private UUID id;
