@@ -14,8 +14,8 @@ public class Controller {
     @Autowired
     private Repository repository;
 
-    private UserForSession toUserForReturn(UserEntity user) {
-        UserForSession u = new UserForSession();
+    private UserForReturn toUserForSession(UserEntity user) {
+        UserForReturn u = new UserForReturn();
         u.setId(user.getId());
         u.setEmail(user.getEmail());
         u.setName(user.getName());
@@ -30,7 +30,7 @@ public class Controller {
     }
 
     @PostMapping("/")
-    public UserEntity create(@RequestBody NewUser newUser, HttpSession session) {
+    public UserForReturn create(@RequestBody NewUser newUser, HttpSession session) {
         String email = newUser.getEmail();
         String name = newUser.getName();
 
@@ -73,14 +73,16 @@ public class Controller {
             argon2.wipeArray(passwordByte);
         }
 
-        session.setAttribute("user", toUserForReturn(user));
-        return repository.save(user);
+        UserEntity savedUser = repository.save(user);
+        UserForReturn ufs = toUserForSession(savedUser);
+        session.setAttribute("user", ufs);
+        return ufs;
     }
 
     @DeleteMapping("/")
     public ResponseEntity<String> delete(HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForSession user) {
+        if (rawUser instanceof UserForReturn user) {
             return repository.findById(user.getId()).map(u -> {
                 session.invalidate();
                 repository.deleteById(u.getId());
@@ -99,9 +101,9 @@ public class Controller {
     }
 
     @GetMapping("/")
-    public Object get(HttpSession session) {
+    public UserForReturn get(HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForSession user) {
+        if (rawUser instanceof UserForReturn user) {
             return user;
         }
 
@@ -131,9 +133,9 @@ public class Controller {
     }
 
     @PutMapping("/")
-    public UserEntity update(@RequestBody NewUser newUser, HttpSession session) {
+    public UserForReturn update(@RequestBody NewUser newUser, HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForSession user) {
+        if (rawUser instanceof UserForReturn user) {
             return repository.findById(user.getId()).map(u -> {
                 String email = newUser.getEmail();
                 String name = newUser.getName();
@@ -160,8 +162,9 @@ public class Controller {
                     ));
                 }
 
-                session.setAttribute("user", toUserForReturn(u));
-                return repository.save(u);
+                UserForReturn ufs = toUserForSession(u);
+                session.setAttribute("user", ufs);
+                return ufs;
             }).orElseThrow(() -> {
                 session.invalidate();
                 return new ResponseStatusException(
