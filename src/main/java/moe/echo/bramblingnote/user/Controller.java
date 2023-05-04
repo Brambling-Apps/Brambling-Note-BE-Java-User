@@ -30,7 +30,7 @@ public class Controller {
     }
 
     @PostMapping("/")
-    public UserEntity add(@RequestBody NewUser newUser, HttpSession session) {
+    public UserEntity create(@RequestBody NewUser newUser, HttpSession session) {
         String email = newUser.getEmail();
         String name = newUser.getName();
 
