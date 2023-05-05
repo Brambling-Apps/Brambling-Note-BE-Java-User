@@ -9,7 +9,6 @@ import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -96,8 +95,10 @@ public class Controller {
     }
 
     @GetMapping("/health")
-    public ResponseEntity<Object> health() {
-        return ResponseEntity.ok().build();
+    public MessageJson health() {
+        MessageJson message = new MessageJson();
+        message.setMessage("ok");
+        return message;
     }
 
     @PostMapping("/")
@@ -193,13 +194,16 @@ public class Controller {
     }
 
     @DeleteMapping("/")
-    public ResponseEntity<String> delete(HttpSession session) {
+    public MessageJson delete(HttpSession session) {
         Object rawUser = session.getAttribute("user");
         if (rawUser instanceof UserForReturn user) {
             return repository.findById(user.getId()).map(u -> {
                 session.invalidate();
                 repository.deleteById(u.getId());
-                return ResponseEntity.ok().body("");
+
+                MessageJson message = new MessageJson();
+                message.setMessage("ok");
+                return message;
             }).orElseThrow(() -> {
                 session.invalidate();
                 return new ResponseStatusException(
@@ -246,7 +250,7 @@ public class Controller {
     }
 
     @GetMapping("/verification-email")
-    public ResponseEntity<Object> verifyEmail(HttpSession httpSession, Environment environment) {
+    public MessageJson verifyEmail(HttpSession httpSession, Environment environment) {
         Object rawUser = httpSession.getAttribute("user");
         if (rawUser instanceof UserForReturn user) {
             repository.findById(user.getId()).map(u -> {
@@ -258,7 +262,9 @@ public class Controller {
                 try {
                     sendVerificationEmail(u.getEmail(), verificationCode);
 
-                    return ResponseEntity.ok().build();
+                    MessageJson message = new MessageJson();
+                    message.setMessage("ok");
+                    return message;
                 } catch (MessagingException e) {
                     throw new ResponseStatusException(HttpStatusCode.valueOf(500), e.getMessage());
                 }
