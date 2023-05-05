@@ -162,7 +162,8 @@ public class Controller {
                     ));
                 }
 
-                UserForReturn ufs = toUserForSession(u);
+                UserEntity savedUser = repository.save(u);
+                UserForReturn ufs = toUserForSession(savedUser);
                 session.setAttribute("user", ufs);
                 return ufs;
             }).orElseThrow(() -> {
