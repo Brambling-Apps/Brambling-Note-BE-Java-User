@@ -32,5 +32,7 @@ public class UserEntity {
     @Column(nullable = false)
     private Boolean verified = false;
 
+    private String verificationCode;
+
     private Date lastVerificationEmail = new Date();
 }

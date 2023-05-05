@@ -31,6 +31,10 @@ dependencies {
 	implementation 'org.springframework.kafka:spring-kafka'
 	implementation 'org.springframework.session:spring-session-data-redis'
 	implementation 'de.mkammerer:argon2-jvm:2.11'
+	// https://mvnrepository.com/artifact/jakarta.mail/jakarta.mail-api
+	implementation 'jakarta.mail:jakarta.mail-api:2.1.1'
+	// https://mvnrepository.com/artifact/org.eclipse.angus/jakarta.mail
+	implementation 'org.eclipse.angus:jakarta.mail:2.0.1'
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'org.postgresql:postgresql'
 	annotationProcessor 'org.projectlombok:lombok'

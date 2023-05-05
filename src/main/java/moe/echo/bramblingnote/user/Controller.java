@@ -2,17 +2,32 @@ package moe.echo.bramblingnote.user;
 
 import de.mkammerer.argon2.Argon2;
 import de.mkammerer.argon2.Argon2Factory;
+import jakarta.mail.*;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeMessage;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.security.SecureRandom;
+import java.util.Base64;
+import java.util.Objects;
+import java.util.Properties;
+
 @RestController
 public class Controller {
     @Autowired
     private Repository repository;
+
+    private final Environment environment;
+
+    public Controller(Environment environment) {
+        this.environment = environment;
+    }
 
     private UserForReturn toUserForSession(UserEntity user) {
         UserForReturn u = new UserForReturn();
@@ -22,6 +37,62 @@ public class Controller {
         u.setVerified(user.getVerified());
         u.setLastVerificationEmail(user.getLastVerificationEmail());
         return u;
+    }
+
+    private String newVerificationCode() {
+        SecureRandom random = new SecureRandom();
+        byte[] bytes = new byte[20];
+        random.nextBytes(bytes);
+        Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
+        return encoder.encodeToString(bytes);
+    }
+
+    private void sendVerificationEmail(String email, String verificationCode) throws MessagingException {
+        String smtpEmail = environment.getProperty("smtp-email");
+        String smtpPassword = environment.getProperty("smtp-password");
+        String verificationEmailContent = environment.getProperty("verification-email-content");
+
+        if (smtpEmail == null || smtpPassword == null) {
+            throw new MessagingException("smtp-email and smtp-password from environment should not be null");
+        }
+
+        if (verificationEmailContent == null) {
+            throw new MessagingException("verification-email-content from environment should not be null");
+        }
+
+        String smtpSslEnable = environment.getProperty("smtp-ssl-enable");
+        String smtpStarttlsEnable = environment.getProperty("smtp-starttls-enable");
+
+        if (!Objects.equals(smtpSslEnable, "true") && !Objects.equals(smtpSslEnable, "false")) {
+            smtpSslEnable = "false";
+        }
+
+        if (!Objects.equals(smtpStarttlsEnable, "true") && !Objects.equals(smtpStarttlsEnable, "false")) {
+            smtpStarttlsEnable = "false";
+        }
+
+        Properties properties = new Properties();
+        properties.put("mail.smtp.host", environment.getProperty("smtp-host"));
+        properties.put("mail.smtp.port", environment.getProperty("smtp-port"));
+        properties.put("mail.smtp.auth", environment.getProperty("smtp-auth"));
+        properties.put("mail.smtp.ssl.enable", smtpSslEnable);
+        properties.put("mail.smtp.starttls.enable", smtpStarttlsEnable);
+
+        Session session = Session.getInstance(
+                properties,
+                new Authenticator() {
+                    protected PasswordAuthentication getPasswordAuthentication() {
+                        return new PasswordAuthentication(smtpEmail, smtpPassword);
+                    }
+                });
+
+        Message message = new MimeMessage(session);
+        message.setFrom(new InternetAddress(smtpEmail));
+        message.setRecipients(Message.RecipientType.TO, new InternetAddress[]{new InternetAddress(email)});
+        message.setSubject(environment.getProperty("verification-email-subject"));
+        message.setText(String.format(verificationEmailContent, verificationCode));
+
+        Transport.send(message);
     }
 
     @GetMapping("/health")
@@ -73,10 +144,52 @@ public class Controller {
             argon2.wipeArray(passwordByte);
         }
 
+        String verificationCode = newVerificationCode();
+        user.setVerificationCode(verificationCode);
         UserEntity savedUser = repository.save(user);
+
+        new Thread(() -> {
+            try {
+                sendVerificationEmail(email, verificationCode);
+            } catch (MessagingException e) {
+                System.out.println("Error from mail service:");
+                e.printStackTrace();
+            }
+        }).start();
+
         UserForReturn ufs = toUserForSession(savedUser);
         session.setAttribute("user", ufs);
         return ufs;
+    }
+
+    @PostMapping("/verification")
+    public UserForReturn verify(@RequestBody VerificationCodeRequest request, HttpSession session) {
+        Object rawUser = session.getAttribute("user");
+        if (rawUser instanceof UserForReturn user) {
+            return repository.findById(user.getId()).map(u -> {
+                if (u.getVerificationCode().equals(request.getVerificationCode())) {
+                    u.setVerified(true);
+                    UserEntity savedUser = repository.save(u);
+                    UserForReturn ufs = toUserForSession(savedUser);
+                    session.setAttribute("user", ufs);
+                    return ufs;
+                }
+
+                throw new ResponseStatusException(
+                        HttpStatusCode.valueOf(401),
+                        "Verification code is invalid"
+                );
+            }).orElseThrow(() -> {
+                session.invalidate();
+                return new ResponseStatusException(
+                        HttpStatusCode.valueOf(404), "User `" + user.getId() + "` was not found"
+                );
+            });
+        }
+
+        throw new ResponseStatusException(
+                HttpStatusCode.valueOf(401), "You are not login yet"
+        );
     }
 
     @DeleteMapping("/")
@@ -130,6 +243,34 @@ public class Controller {
                     HttpStatusCode.valueOf(401), "Invalid password"
             );
         }
+    }
+
+    @GetMapping("/verification-email")
+    public ResponseEntity<Object> verifyEmail(HttpSession httpSession, Environment environment) {
+        Object rawUser = httpSession.getAttribute("user");
+        if (rawUser instanceof UserForReturn user) {
+            repository.findById(user.getId()).map(u -> {
+                String verificationCode = newVerificationCode();
+                u.setVerificationCode(verificationCode);
+                repository.save(u);
+
+                // TODO: multithreading?
+                try {
+                    sendVerificationEmail(u.getEmail(), verificationCode);
+
+                    return ResponseEntity.ok().build();
+                } catch (MessagingException e) {
+                    throw new ResponseStatusException(HttpStatusCode.valueOf(500), e.getMessage());
+                }
+            }).orElseThrow(() -> new ResponseStatusException(
+                    HttpStatusCode.valueOf(404),
+                    "User `" + user.getId() + "` not found"
+            ));
+        }
+
+        throw new ResponseStatusException(
+                HttpStatusCode.valueOf(401), "You are not login yet"
+        );
     }
 
     @PutMapping("/")
