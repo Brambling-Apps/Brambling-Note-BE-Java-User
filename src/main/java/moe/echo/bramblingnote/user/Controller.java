@@ -20,7 +20,7 @@ public class Controller {
         u.setEmail(user.getEmail());
         u.setName(user.getName());
         u.setVerified(user.getVerified());
-        u.setLastVerifyEmail(user.getLastVerifyEmail());
+        u.setLastVerificationEmail(user.getLastVerificationEmail());
         return u;
     }
 

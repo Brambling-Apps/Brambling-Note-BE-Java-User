@@ -32,5 +32,5 @@ public class UserEntity {
     @Column(nullable = false)
     private Boolean verified = false;
 
-    private Date lastVerifyEmail = new Date();
+    private Date lastVerificationEmail = new Date();
 }

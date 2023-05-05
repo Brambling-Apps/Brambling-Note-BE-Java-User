@@ -18,5 +18,5 @@ public class UserForReturn implements Serializable {
 
     private Boolean verified = false;
 
-    private Date lastVerifyEmail;
+    private Date lastVerificationEmail;
 }
