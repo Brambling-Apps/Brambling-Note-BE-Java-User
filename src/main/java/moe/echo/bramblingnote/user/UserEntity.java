@@ -8,13 +8,14 @@ import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
+import java.io.Serializable;
 import java.util.Date;
 import java.util.UUID;
 
 @Entity
 @Getter
 @Setter
-public class UserEntity {
+public class UserEntity implements Serializable {
     @Id
     @UuidGenerator
     private UUID id;

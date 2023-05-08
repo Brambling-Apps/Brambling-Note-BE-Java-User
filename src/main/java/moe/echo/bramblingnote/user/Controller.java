@@ -6,7 +6,6 @@ import jakarta.mail.*;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.servlet.http.HttpSession;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.web.bind.annotation.*;
@@ -19,23 +18,13 @@ import java.util.Properties;
 
 @RestController
 public class Controller {
-    @Autowired
-    private Repository repository;
+    private final ServiceImpl service;
 
     private final Environment environment;
 
-    public Controller(Environment environment) {
+    public Controller(ServiceImpl service, Environment environment) {
+        this.service = service;
         this.environment = environment;
-    }
-
-    private UserForReturn toUserForSession(UserEntity user) {
-        UserForReturn u = new UserForReturn();
-        u.setId(user.getId());
-        u.setEmail(user.getEmail());
-        u.setName(user.getName());
-        u.setVerified(user.getVerified());
-        u.setLastVerificationEmail(user.getLastVerificationEmail());
-        return u;
     }
 
     private String newVerificationCode() {
@@ -94,6 +83,46 @@ public class Controller {
         Transport.send(message);
     }
 
+    private UserForReturn toExistedUserForReturn(HttpSession session) {
+        Object rawUser = session.getAttribute("user");
+        if (!(rawUser instanceof UserForReturn user)) {
+            session.invalidate();
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(401), "You are not login yet"
+            );
+        }
+
+        UserForReturn existedUser = service.findById(user.getId());
+        if (existedUser == null) {
+            session.invalidate();
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(404), "User `" + user.getId() + "` was not found"
+            );
+        }
+
+        return existedUser;
+    }
+
+    private UserEntity toUser(NewUser newUser) {
+        UserEntity user = new UserEntity();
+        user.setEmail(newUser.getEmail());
+        user.setName(newUser.getName());
+
+        if (newUser.getPassword() != null) {
+            Argon2 argon2 = Argon2Factory.create();
+            byte[] passwordByte = newUser.getPassword().getBytes();
+            try {
+                // Hash password
+                user.setPasswordHash(argon2.hash(10, 65536, 1, passwordByte));
+            } finally {
+                // Wipe confidential data
+                argon2.wipeArray(passwordByte);
+            }
+        }
+
+        return user;
+    }
+
     @GetMapping("/health")
     public MessageJson health() {
         MessageJson message = new MessageJson();
@@ -122,7 +151,7 @@ public class Controller {
             );
         }
 
-        boolean emailExisted = repository.existsByEmail(email);
+        boolean emailExisted = service.existsByEmail(email);
 
         if (emailExisted) {
             throw new ResponseStatusException(
@@ -130,24 +159,11 @@ public class Controller {
             );
         }
 
-        UserEntity user = new UserEntity();
-        user.setEmail(email);
-        user.setName(name);
-
-        // https://github.com/phxql/argon2-jvm#usage
-        Argon2 argon2 = Argon2Factory.create();
-        byte[] passwordByte = newUser.getPassword().getBytes();
-        try {
-            // Hash password
-            user.setPasswordHash(argon2.hash(10, 65536, 1, passwordByte));
-        } finally {
-            // Wipe confidential data
-            argon2.wipeArray(passwordByte);
-        }
+        UserEntity user = toUser(newUser);
 
         String verificationCode = newVerificationCode();
         user.setVerificationCode(verificationCode);
-        UserEntity savedUser = repository.save(user);
+        UserForReturn savedUser = service.save(user);
 
         new Thread(() -> {
             try {
@@ -158,171 +174,98 @@ public class Controller {
             }
         }).start();
 
-        UserForReturn ufs = toUserForSession(savedUser);
-        session.setAttribute("user", ufs);
-        return ufs;
+        session.setAttribute("user", savedUser);
+        return savedUser;
     }
 
     @PostMapping("/verification")
     public UserForReturn verify(@RequestBody VerificationCodeRequest request, HttpSession session) {
-        Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
-            return repository.findById(user.getId()).map(u -> {
-                if (u.getVerificationCode().equals(request.getVerificationCode())) {
-                    u.setVerified(true);
-                    UserEntity savedUser = repository.save(u);
-                    UserForReturn ufs = toUserForSession(savedUser);
-                    session.setAttribute("user", ufs);
-                    return ufs;
-                }
+        UserForReturn existedUser = toExistedUserForReturn(session);
 
-                throw new ResponseStatusException(
-                        HttpStatusCode.valueOf(401),
-                        "Verification code is invalid"
-                );
-            }).orElseThrow(() -> {
-                session.invalidate();
-                return new ResponseStatusException(
-                        HttpStatusCode.valueOf(404), "User `" + user.getId() + "` was not found"
-                );
-            });
+        if (!service.verificationCodeMatch(existedUser.getId(), request.getVerificationCode())) {
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(401),
+                    "Verification code is invalid"
+            );
         }
 
-        throw new ResponseStatusException(
-                HttpStatusCode.valueOf(401), "You are not login yet"
-        );
+        return existedUser;
     }
 
     @DeleteMapping("/")
     public MessageJson delete(HttpSession session) {
-        Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
-            return repository.findById(user.getId()).map(u -> {
-                session.invalidate();
-                repository.deleteById(u.getId());
+        UserForReturn existedUser = toExistedUserForReturn(session);
 
-                MessageJson message = new MessageJson();
-                message.setMessage("ok");
-                return message;
-            }).orElseThrow(() -> {
-                session.invalidate();
-                return new ResponseStatusException(
-                        HttpStatusCode.valueOf(404), "User `" + user.getId() + "` was not found"
-                );
-            });
-        }
+        session.invalidate();
+        service.deleteById(existedUser.getId());
 
-        throw new ResponseStatusException(
-                HttpStatusCode.valueOf(401), "You are not login yet"
-        );
+        MessageJson message = new MessageJson();
+        message.setMessage("ok");
+        return message;
     }
 
     @GetMapping("/")
     public UserForReturn get(HttpSession session) {
-        Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
-            return user;
-        }
-
-        throw new ResponseStatusException(
-                HttpStatusCode.valueOf(401), "You are not login yet"
-        );
+        return toExistedUserForReturn(session);
     }
 
     @GetMapping("/{email}")
-    public UserEntity getByEmailAndPassword(@PathVariable String email, @RequestParam String password) {
-        Argon2 argon2 = Argon2Factory.create();
-
-        UserEntity user = repository.findByEmail(email);
+    public UserForReturn getByEmailAndPassword(@PathVariable String email, @RequestParam String password) {
+        UserForReturn user = service.findByEmail(email);
         if (user == null) {
             throw new ResponseStatusException(
                     HttpStatusCode.valueOf(404), "User `" + email + "` was not found"
             );
         }
 
-        if (password != null && argon2.verify(user.getPasswordHash(), password.getBytes())) {
-            return user;
-        } else {
+        if (!service.passwordMatch(email, password)) {
             throw new ResponseStatusException(
                     HttpStatusCode.valueOf(401), "Invalid password"
             );
         }
+
+        return user;
     }
 
     @GetMapping("/verification-email")
-    public MessageJson verifyEmail(HttpSession httpSession, Environment environment) {
-        Object rawUser = httpSession.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
-            repository.findById(user.getId()).map(u -> {
-                String verificationCode = newVerificationCode();
-                u.setVerificationCode(verificationCode);
-                repository.save(u);
+    public MessageJson verifyEmail(HttpSession httpSession) {
+        UserForReturn user = toExistedUserForReturn(httpSession);
+        UserEntity newUser = new UserEntity();
+        newUser.setId(user.getId());
+        String verificationCode = newVerificationCode();
+        newUser.setVerificationCode(verificationCode);
+        service.save(newUser);
 
-                // TODO: multithreading?
-                try {
-                    sendVerificationEmail(u.getEmail(), verificationCode);
+        try {
+            sendVerificationEmail(user.getEmail(), verificationCode);
 
-                    MessageJson message = new MessageJson();
-                    message.setMessage("ok");
-                    return message;
-                } catch (MessagingException e) {
-                    throw new ResponseStatusException(HttpStatusCode.valueOf(500), e.getMessage());
-                }
-            }).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatusCode.valueOf(404),
-                    "User `" + user.getId() + "` not found"
-            ));
+            MessageJson message = new MessageJson();
+            message.setMessage("ok");
+            return message;
+        } catch (MessagingException e) {
+            throw new ResponseStatusException(HttpStatusCode.valueOf(500), e.getMessage());
         }
-
-        throw new ResponseStatusException(
-                HttpStatusCode.valueOf(401), "You are not login yet"
-        );
     }
 
     @PutMapping("/")
     public UserForReturn update(@RequestBody NewUser newUser, HttpSession session) {
-        Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
-            return repository.findById(user.getId()).map(u -> {
-                String email = newUser.getEmail();
-                String name = newUser.getName();
-                String password = newUser.getPassword();
+        UserForReturn existedUser = toExistedUserForReturn(session);
+        UserEntity user = toUser(newUser);
+        user.setId(existedUser.getId());
 
-                if (email != null && !email.equals(u.getEmail())) {
-                    boolean emailExisted = repository.existsByEmail(email);
-
-                    if (emailExisted) {
-                        throw new ResponseStatusException(
-                                HttpStatusCode.valueOf(400), "User " + email + " already exists"
-                        );
-                    }
-
-                    u.setEmail(email);
-                }
-                if (name != null) {
-                    u.setName(name);
-                }
-                if (password != null) {
-                    Argon2 argon2 = Argon2Factory.create();
-                    u.setPasswordHash(argon2.hash(
-                            10, 65536, 1, password.getBytes()
-                    ));
-                }
-
-                UserEntity savedUser = repository.save(u);
-                UserForReturn ufs = toUserForSession(savedUser);
-                session.setAttribute("user", ufs);
-                return ufs;
-            }).orElseThrow(() -> {
-                session.invalidate();
-                return new ResponseStatusException(
-                        HttpStatusCode.valueOf(404), "User `" + user.getId() + "` was not found"
+        String email = newUser.getEmail();
+        if (email != null && !email.equals(existedUser.getEmail())) {
+            if (service.existsByEmail(email)) {
+                throw new ResponseStatusException(
+                        HttpStatusCode.valueOf(400), "User " + email + " already exists"
                 );
-            });
+            }
+
+            user.setEmail(email);
         }
 
-        throw new ResponseStatusException(
-                HttpStatusCode.valueOf(401), "You are not login yet"
-        );
+        UserForReturn savedUser = service.save(user);
+        session.setAttribute("user", savedUser);
+        return savedUser;
     }
 }
