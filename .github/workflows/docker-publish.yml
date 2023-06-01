@@ -15,7 +15,7 @@ on:
   # pull_request:
     # branches: [ "main" ]
   release:
-    type: [ released ]
+    type: [ "released" ]
 
 env:
   # Use docker.io for Docker Hub if empty
