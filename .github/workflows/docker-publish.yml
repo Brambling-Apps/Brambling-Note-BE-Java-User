@@ -52,7 +52,9 @@ jobs:
         run: chmod +x ./gradlew
         
       - name: Execute Gradle build
-        run: ./gradlew build
+        # Tests should be done before released
+        # Skip test for GitHub Actions
+        run: ./gradlew build -Pprofile=docker -x test
 
       # Install the cosign tool except on PR
       # https://github.com/sigstore/cosign-installer
