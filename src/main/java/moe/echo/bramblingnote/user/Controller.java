@@ -12,6 +12,7 @@ import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -137,11 +138,8 @@ public class Controller {
     }
 
     @GetMapping("/health")
-    public MessageJson health() {
-        MessageJson message = new MessageJson();
-        message.setMessage("ok");
-        return message;
-    }
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void health() {}
 
     @PostMapping("/")
     @JsonView(View.ViewOnly.class)
@@ -210,15 +208,12 @@ public class Controller {
 
     @DeleteMapping("/")
     @JsonView(View.ViewOnly.class)
-    public MessageJson delete() {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete() {
         UserDto existedUser = getUserFromSession();
 
         session.invalidate();
         service.deleteById(existedUser.getId());
-
-        MessageJson message = new MessageJson();
-        message.setMessage("ok");
-        return message;
     }
 
     @GetMapping("/")
@@ -247,7 +242,8 @@ public class Controller {
     }
 
     @GetMapping("/verification-email")
-    public MessageJson verifyEmail() {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void verifyEmail() {
         UserDto user = getUserFromSession();
         String verificationCode = newVerificationCode();
         user.setVerificationCode(verificationCode);
@@ -255,10 +251,6 @@ public class Controller {
 
         try {
             sendVerificationEmail(user.getEmail(), verificationCode);
-
-            MessageJson message = new MessageJson();
-            message.setMessage("ok");
-            return message;
         } catch (MessagingException e) {
             throw new ResponseStatusException(HttpStatusCode.valueOf(500), e.getMessage());
         }
