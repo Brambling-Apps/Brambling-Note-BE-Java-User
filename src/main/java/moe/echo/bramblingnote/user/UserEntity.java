@@ -1,6 +1,5 @@
 package moe.echo.bramblingnote.user;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Id;
@@ -26,7 +25,6 @@ public class UserEntity implements Serializable {
     @Column(nullable = false)
     private String name;
 
-    @JsonIgnore
     @Column(nullable = false)
     private String passwordHash;
 

@@ -1,7 +1,12 @@
 package moe.echo.bramblingnote.user;
 
-import de.mkammerer.argon2.Argon2;
-import de.mkammerer.argon2.Argon2Factory;
+import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
+import com.github.fge.jsonpatch.JsonPatch;
+import com.github.fge.jsonpatch.JsonPatchException;
 import jakarta.mail.*;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
@@ -13,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.Date;
 import java.util.Objects;
 import java.util.Properties;
 
@@ -22,9 +28,24 @@ public class Controller {
 
     private final Environment environment;
 
-    public Controller(ServiceImpl service, Environment environment) {
+    private final HttpSession session;
+
+    private final ObjectMapper objectMapper;
+
+    private final UserMapper userMapper;
+
+    public Controller(
+            ServiceImpl service,
+            Environment environment,
+            HttpSession session,
+            ObjectMapper objectMapper,
+            UserMapper userMapper
+    ) {
         this.service = service;
         this.environment = environment;
+        this.session = session;
+        this.objectMapper = objectMapper;
+        this.userMapper = userMapper;
     }
 
     private String newVerificationCode() {
@@ -83,44 +104,36 @@ public class Controller {
         Transport.send(message);
     }
 
-    private UserForReturn toExistedUserForReturn(HttpSession session) {
+    private UserDto getUserFromSession() {
         Object rawUser = session.getAttribute("user");
-        if (!(rawUser instanceof UserForReturn user)) {
+
+        if (!(rawUser instanceof String userJson)) {
             session.invalidate();
             throw new ResponseStatusException(
                     HttpStatusCode.valueOf(401), "You are not login yet"
             );
         }
 
-        UserForReturn existedUser = service.findById(user.getId());
-        if (existedUser == null) {
-            session.invalidate();
+        ObjectMapper mapper = new ObjectMapper();
+
+        try {
+            return mapper.readValue(userJson, UserDto.class);
+        } catch (JsonProcessingException e) {
             throw new ResponseStatusException(
-                    HttpStatusCode.valueOf(404), "User `" + user.getId() + "` was not found"
+                    HttpStatusCode.valueOf(500), e.getMessage()
             );
         }
-
-        return existedUser;
     }
 
-    private UserEntity toUser(NewUser newUser) {
-        UserEntity user = new UserEntity();
-        user.setEmail(newUser.getEmail());
-        user.setName(newUser.getName());
-
-        if (newUser.getPassword() != null) {
-            Argon2 argon2 = Argon2Factory.create();
-            byte[] passwordByte = newUser.getPassword().getBytes();
-            try {
-                // Hash password
-                user.setPasswordHash(argon2.hash(10, 65536, 1, passwordByte));
-            } finally {
-                // Wipe confidential data
-                argon2.wipeArray(passwordByte);
-            }
+    private void saveToSession (UserDto user) {
+        ObjectWriter writer = new ObjectMapper().writerWithDefaultPrettyPrinter();
+        try {
+            session.setAttribute("user", writer.writeValueAsString(user));
+        } catch (JsonProcessingException e) {
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(500), e.getMessage()
+            );
         }
-
-        return user;
     }
 
     @GetMapping("/health")
@@ -131,7 +144,8 @@ public class Controller {
     }
 
     @PostMapping("/")
-    public UserForReturn create(@RequestBody NewUser newUser, HttpSession session) {
+    @JsonView(View.ViewOnly.class)
+    public UserDto create(@RequestBody @JsonView(View.EditOnly.class) UserDto newUser) {
         String email = newUser.getEmail();
         String name = newUser.getName();
 
@@ -159,11 +173,9 @@ public class Controller {
             );
         }
 
-        UserEntity user = toUser(newUser);
-
         String verificationCode = newVerificationCode();
-        user.setVerificationCode(verificationCode);
-        UserForReturn savedUser = service.save(user);
+        newUser.setVerificationCode(verificationCode);
+        UserDto savedUser = userMapper.toUserDto(service.save(userMapper.toUser(newUser)));
 
         new Thread(() -> {
             try {
@@ -174,27 +186,32 @@ public class Controller {
             }
         }).start();
 
-        session.setAttribute("user", savedUser);
+        saveToSession(savedUser);
         return savedUser;
     }
 
     @PostMapping("/verification")
-    public UserForReturn verify(@RequestBody VerificationCodeRequest request, HttpSession session) {
-        UserForReturn existedUser = toExistedUserForReturn(session);
+    @JsonView(View.ViewOnly.class)
+    public UserDto verify(@RequestBody VerificationCodeRequest request) {
+        UserDto user = getUserFromSession();
 
-        if (!service.verificationCodeMatch(existedUser.getId(), request.getVerificationCode())) {
+        if (!service.verificationCodeMatch(user.getId(), request.getVerificationCode())) {
             throw new ResponseStatusException(
                     HttpStatusCode.valueOf(401),
                     "Verification code is invalid"
             );
         }
 
-        return existedUser;
+        user.setVerified(true);
+        user.setVerificationCode(null);
+
+        return userMapper.toUserDto(service.save(userMapper.toUser(user)));
     }
 
     @DeleteMapping("/")
-    public MessageJson delete(HttpSession session) {
-        UserForReturn existedUser = toExistedUserForReturn(session);
+    @JsonView(View.ViewOnly.class)
+    public MessageJson delete() {
+        UserDto existedUser = getUserFromSession();
 
         session.invalidate();
         service.deleteById(existedUser.getId());
@@ -205,13 +222,15 @@ public class Controller {
     }
 
     @GetMapping("/")
-    public UserForReturn get(HttpSession session) {
-        return toExistedUserForReturn(session);
+    @JsonView(View.ViewOnly.class)
+    public UserDto get() {
+        return getUserFromSession();
     }
 
     @GetMapping("/{email}")
-    public UserForReturn getByEmailAndPassword(@PathVariable String email, @RequestParam String password) {
-        UserForReturn user = service.findByEmail(email);
+    @JsonView(View.ViewOnly.class)
+    public UserDto getByEmailAndPassword(@PathVariable String email, @RequestParam String password) {
+        UserDto user = userMapper.toUserDto(service.findByEmail(email));
         if (user == null) {
             throw new ResponseStatusException(
                     HttpStatusCode.valueOf(404), "User `" + email + "` was not found"
@@ -228,13 +247,11 @@ public class Controller {
     }
 
     @GetMapping("/verification-email")
-    public MessageJson verifyEmail(HttpSession httpSession) {
-        UserForReturn user = toExistedUserForReturn(httpSession);
-        UserEntity newUser = new UserEntity();
-        newUser.setId(user.getId());
+    public MessageJson verifyEmail() {
+        UserDto user = getUserFromSession();
         String verificationCode = newVerificationCode();
-        newUser.setVerificationCode(verificationCode);
-        service.save(newUser);
+        user.setVerificationCode(verificationCode);
+        service.save(userMapper.toUser(user));
 
         try {
             sendVerificationEmail(user.getEmail(), verificationCode);
@@ -247,25 +264,51 @@ public class Controller {
         }
     }
 
-    @PutMapping("/")
-    public UserForReturn update(@RequestBody NewUser newUser, HttpSession session) {
-        UserForReturn existedUser = toExistedUserForReturn(session);
-        UserEntity user = toUser(newUser);
-        user.setId(existedUser.getId());
+    @PatchMapping("/")
+    @JsonView(View.ViewOnly.class)
+    public UserDto patch(@RequestBody JsonPatch jsonPatch) {
+        UserDto userFromSession = getUserFromSession();
 
-        String email = newUser.getEmail();
-        if (email != null && !email.equals(existedUser.getEmail())) {
-            if (service.existsByEmail(email)) {
+        try {
+            objectMapper.setConfig(objectMapper.getDeserializationConfig().withView(View.EditOnly.class));
+
+            UserDto patchedUser = objectMapper.treeToValue(
+                    jsonPatch.apply(objectMapper.convertValue(userFromSession, JsonNode.class))
+                    , UserDto.class
+            );
+            UserEntity existedUser = service.findById(userFromSession.getId());
+
+            if (existedUser == null) {
                 throw new ResponseStatusException(
-                        HttpStatusCode.valueOf(400), "User " + email + " already exists"
+                        HttpStatusCode.valueOf(404), "User " + userFromSession.getId() + "does not exist"
                 );
             }
 
-            user.setEmail(email);
-        }
+            UserEntity updatedUser = userMapper.toUser(patchedUser, existedUser);
 
-        UserForReturn savedUser = service.save(user);
-        session.setAttribute("user", savedUser);
-        return savedUser;
+            if (!Objects.equals(updatedUser.getEmail(), userFromSession.getEmail())) {
+                String verificationCode = newVerificationCode();
+                updatedUser.setVerified(false);
+                updatedUser.setVerificationCode(verificationCode);
+                updatedUser.setLastVerificationEmail(new Date());
+                new Thread(() -> {
+                    try {
+                        sendVerificationEmail(updatedUser.getEmail(), verificationCode);
+                    } catch (MessagingException e) {
+                        System.out.println("Error from mail service: " + e.getMessage());
+                    }
+                }).start();
+            }
+
+            if (patchedUser.getPassword() != null) {
+                // TODO
+            }
+
+            return userMapper.toUserDto(service.save(updatedUser));
+        } catch (JsonPatchException | JsonProcessingException e) {
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(500), "Failed to process request: " + e
+            );
+        }
     }
 }

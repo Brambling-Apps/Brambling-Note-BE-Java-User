@@ -13,3 +13,6 @@ spring:
     database-platform: org.hibernate.dialect.PostgreSQL94Dialect
   datasource:
     driver-class-name: org.postgresql.Driver
+  jackson:
+    mapper:
+      default-view-inclusion: false
