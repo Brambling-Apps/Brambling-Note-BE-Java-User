@@ -31,6 +31,7 @@ dependencies {
 	implementation 'org.springframework.cloud:spring-cloud-starter-consul-discovery'
 	implementation 'org.springframework.session:spring-session-data-redis'
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
+	//	https://github.com/phxql/argon2-jvm#gradle
 	implementation 'de.mkammerer:argon2-jvm:2.11'
 	// https://mvnrepository.com/artifact/jakarta.mail/jakarta.mail-api
 	implementation 'jakarta.mail:jakarta.mail-api:2.1.1'

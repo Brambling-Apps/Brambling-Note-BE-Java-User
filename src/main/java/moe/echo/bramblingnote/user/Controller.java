@@ -7,6 +7,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.github.fge.jsonpatch.JsonPatch;
 import com.github.fge.jsonpatch.JsonPatchException;
+import de.mkammerer.argon2.Argon2;
+import de.mkammerer.argon2.Argon2Factory;
+import de.mkammerer.argon2.Argon2Helper;
 import jakarta.mail.*;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
@@ -137,6 +140,18 @@ public class Controller {
         }
     }
 
+    private Argon2 getArgon2() {
+        Argon2 argon2 = Argon2Factory.create();
+
+        // https://github.com/phxql/argon2-jvm#recommended-parameters
+        // 1000 = The hash call must take at most 1000 ms
+        // 65536 = Memory cost
+        // 1 = parallelism
+        Argon2Helper.findIterations(argon2, 1000, 65536, 1);
+
+        return argon2;
+    }
+
     @GetMapping("/health")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void health() {}
@@ -170,6 +185,16 @@ public class Controller {
                     HttpStatusCode.valueOf(400), "User already exists: " + email
             );
         }
+
+        Argon2 argon2 = getArgon2();
+
+        char[] password = newUser.getPassword().toCharArray();
+        String passwordHash = argon2.hash(10, 65536, 1, password);
+
+        newUser.setPassword(null);
+        newUser.setPasswordHash(passwordHash);
+
+        argon2.wipeArray(password);
 
         String verificationCode = newVerificationCode();
         newUser.setVerificationCode(verificationCode);
@@ -293,7 +318,15 @@ public class Controller {
             }
 
             if (patchedUser.getPassword() != null) {
-                // TODO
+                Argon2 argon2 = getArgon2();
+
+                char[] password = patchedUser.getPassword().toCharArray();
+                String passwordHash = argon2.hash(10, 65536, 1, password);
+
+                patchedUser.setPassword(null);
+                patchedUser.setPasswordHash(passwordHash);
+
+                argon2.wipeArray(password);
             }
 
             return userMapper.toUserDto(service.save(updatedUser));
