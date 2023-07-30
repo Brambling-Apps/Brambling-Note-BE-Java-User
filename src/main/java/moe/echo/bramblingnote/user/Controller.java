@@ -196,6 +196,8 @@ public class Controller {
 
         argon2.wipeArray(password);
 
+        newUser.setVerified(false);
+        newUser.setLastVerificationEmail(new Date());
         String verificationCode = newVerificationCode();
         newUser.setVerificationCode(verificationCode);
         UserDto savedUser = userMapper.toUserDto(service.save(userMapper.toUser(newUser)));
