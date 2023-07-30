@@ -279,7 +279,7 @@ public class Controller {
         }
     }
 
-    @PatchMapping("/")
+    @PatchMapping(path = "/", consumes = "application/json-patch+json")
     @JsonView(View.ViewOnly.class)
     public UserDto patch(@RequestBody JsonPatch jsonPatch) {
         UserDto userFromSession = getUserFromSession();
