@@ -327,7 +327,10 @@ public class Controller {
                 argon2.wipeArray(password);
             }
 
-            return userMapper.toUserDto(service.save(updatedUser));
+            UserDto returnedUser = userMapper.toUserDto(service.save(updatedUser));
+            saveToSession(returnedUser);
+
+            return returnedUser;
         } catch (JsonPatchException | JsonProcessingException e) {
             throw new ResponseStatusException(
                     HttpStatusCode.valueOf(500), "Failed to process request: " + e
