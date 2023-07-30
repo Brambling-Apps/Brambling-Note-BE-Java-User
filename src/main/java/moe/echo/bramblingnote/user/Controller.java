@@ -34,21 +34,17 @@ public class Controller {
 
     private final HttpSession session;
 
-    private final ObjectMapper objectMapper;
-
     private final UserMapper userMapper;
 
     public Controller(
             ServiceImpl service,
             Environment environment,
             HttpSession session,
-            ObjectMapper objectMapper,
             UserMapper userMapper
     ) {
         this.service = service;
         this.environment = environment;
         this.session = session;
-        this.objectMapper = objectMapper;
         this.userMapper = userMapper;
     }
 
@@ -287,25 +283,25 @@ public class Controller {
     @JsonView(View.ViewOnly.class)
     public UserDto patch(@RequestBody JsonPatch jsonPatch) {
         UserDto userFromSession = getUserFromSession();
+        UserEntity existedUser = service.findById(userFromSession.getId());
+        if (existedUser == null) {
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(404), "User " + userFromSession.getId() + "does not exist"
+            );
+        }
 
         try {
+            ObjectMapper objectMapper = new ObjectMapper();
             objectMapper.setConfig(objectMapper.getDeserializationConfig().withView(View.EditOnly.class));
 
             UserDto patchedUser = objectMapper.treeToValue(
-                    jsonPatch.apply(objectMapper.convertValue(userFromSession, JsonNode.class))
+                    jsonPatch.apply(objectMapper.convertValue(existedUser, JsonNode.class))
                     , UserDto.class
             );
-            UserEntity existedUser = service.findById(userFromSession.getId());
-
-            if (existedUser == null) {
-                throw new ResponseStatusException(
-                        HttpStatusCode.valueOf(404), "User " + userFromSession.getId() + "does not exist"
-                );
-            }
 
             UserEntity updatedUser = userMapper.toUser(patchedUser, existedUser);
 
-            if (!Objects.equals(updatedUser.getEmail(), userFromSession.getEmail())) {
+            if (!Objects.equals(updatedUser.getEmail(), existedUser.getEmail())) {
                 String verificationCode = newVerificationCode();
                 updatedUser.setVerified(false);
                 updatedUser.setVerificationCode(verificationCode);
