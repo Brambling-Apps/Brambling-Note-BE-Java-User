@@ -37,8 +37,6 @@ dependencies {
 	implementation 'jakarta.mail:jakarta.mail-api:2.1.1'
 	// https://mvnrepository.com/artifact/org.eclipse.angus/jakarta.mail
 	implementation 'org.eclipse.angus:jakarta.mail:2.0.1'
-//	// https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-databind
-//	implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
 	// https://github.com/java-json-tools/json-patch#using-it-in-your-project
 	implementation 'com.github.java-json-tools:json-patch:1.13'
 	compileOnly 'org.projectlombok:lombok'
@@ -47,7 +45,8 @@ dependencies {
 	annotationProcessor 'org.projectlombok:lombok'
 	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 	annotationProcessor "org.mapstruct:mapstruct-processor:${mapstructVersion}"
-	developmentOnly 'org.springframework.boot:spring-boot-devtools'
+	// https://stackoverflow.com/questions/62575769/java-lang-classcastexception-class-is-in-unnamed-module-of-loader-app-s
+//	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 
