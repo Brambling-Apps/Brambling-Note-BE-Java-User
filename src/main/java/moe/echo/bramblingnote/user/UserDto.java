@@ -24,7 +24,6 @@ public class UserDto implements Serializable {
     private String name;
 
     @JsonView(View.EditOnly.class)
-    @NotBlank
     private String password;
 
     @JsonView(View.Internal.class)
