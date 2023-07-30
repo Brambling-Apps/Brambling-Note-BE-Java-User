@@ -130,7 +130,7 @@ public class Controller {
     }
 
     private void saveToSession (UserDto user) {
-        ObjectWriter writer = new ObjectMapper().writerWithDefaultPrettyPrinter();
+        ObjectWriter writer = new ObjectMapper().writerWithView(View.ViewOnly.class);
         try {
             session.setAttribute("user", writer.writeValueAsString(user));
         } catch (JsonProcessingException e) {
