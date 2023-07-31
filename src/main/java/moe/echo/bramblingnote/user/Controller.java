@@ -9,7 +9,6 @@ import com.github.fge.jsonpatch.JsonPatch;
 import com.github.fge.jsonpatch.JsonPatchException;
 import de.mkammerer.argon2.Argon2;
 import de.mkammerer.argon2.Argon2Factory;
-import de.mkammerer.argon2.Argon2Helper;
 import jakarta.mail.*;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
@@ -136,18 +135,6 @@ public class Controller {
         }
     }
 
-    private Argon2 getArgon2() {
-        Argon2 argon2 = Argon2Factory.create();
-
-        // https://github.com/phxql/argon2-jvm#recommended-parameters
-        // 1000 = The hash call must take at most 1000 ms
-        // 65536 = Memory cost
-        // 1 = parallelism
-        Argon2Helper.findIterations(argon2, 1000, 65536, 1);
-
-        return argon2;
-    }
-
     @GetMapping("/health")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void health() {}
@@ -182,7 +169,7 @@ public class Controller {
             );
         }
 
-        Argon2 argon2 = getArgon2();
+        Argon2 argon2 = Argon2Factory.create();
 
         char[] password = newUser.getPassword().toCharArray();
         String passwordHash = argon2.hash(10, 65536, 1, password);
@@ -295,7 +282,7 @@ public class Controller {
             objectMapper.setConfig(objectMapper.getDeserializationConfig().withView(View.EditOnly.class));
 
             UserDto patchedUser = objectMapper.treeToValue(
-                    jsonPatch.apply(objectMapper.convertValue(existedUser, JsonNode.class))
+                    jsonPatch.apply(objectMapper.convertValue(userMapper.toUserDto(existedUser), JsonNode.class))
                     , UserDto.class
             );
 
@@ -316,7 +303,7 @@ public class Controller {
             }
 
             if (patchedUser.getPassword() != null) {
-                Argon2 argon2 = getArgon2();
+                Argon2 argon2 = Argon2Factory.create();
 
                 char[] password = patchedUser.getPassword().toCharArray();
                 String passwordHash = argon2.hash(10, 65536, 1, password);
@@ -333,7 +320,7 @@ public class Controller {
             return returnedUser;
         } catch (JsonPatchException | JsonProcessingException e) {
             throw new ResponseStatusException(
-                    HttpStatusCode.valueOf(500), "Failed to process request: " + e
+                    HttpStatusCode.valueOf(500), "Failed to process request: " + e.getMessage()
             );
         }
     }
